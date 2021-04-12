@@ -11,7 +11,7 @@ def get_hist(img):
 left_a, left_b, left_c = [],[],[]
 right_a, right_b, right_c = [],[],[]
 
-def sliding_window(img, nwindows=9, margin=50, minpix = 1, draw_windows=True):
+def sliding_window(img, nwindows=15, margin=150, minpix = 1, draw_windows=True):
     global left_a, left_b, left_c,right_a, right_b, right_c 
     left_fit_= np.empty(3)
     right_fit_ = np.empty(3)
@@ -126,13 +126,30 @@ def get_curve(img, leftx, rightx):
     r_fit_x_int = right_fit_cr[0]*img.shape[0]**2 + right_fit_cr[1]*img.shape[0] + right_fit_cr[2]
     lane_center_position = (r_fit_x_int + l_fit_x_int) /2
     center = (car_pos - lane_center_position) * xm_per_pix / 10
+
+    left_fitx = leftx[0] * ploty ** 2 + leftx[1] * ploty + leftx[2]
+    right_fitx = rightx[0] * ploty ** 2 + rightx[1] * ploty + rightx[2]
+
+    radius1 = round((float(left_curverad) + float(right_curverad))/2.,2)
+    print(l_fit_x_int )
+
+    if right_fitx[0] - right_fitx[-1] > 60:
+        curve_direction = 'Left Curve'
+        radius=-5729.57795/radius1
+    elif right_fitx[-1] - right_fitx[0] > 60:
+        curve_direction = 'Right Curve'
+        radius=5729.57795/radius1
+    else:
+        curve_direction = 'Straight'
+        radius=5729.57795/radius1
     # Now our radius of curvature is in meters
-    return (left_curverad, right_curverad, center)
+    return (left_curverad, right_curverad, left_fitx[0] - left_fitx[-1],curve_direction,radius)
 
 def roi_mask():
     stencil = np.zeros((720,1280), dtype='uint8')
     #DEFINE the ROI boundary
-    polygon = np.array([[185,375], [218,225], [702,225], [702,375]])
+    #ORDER: BOTTOM LEFT, TOP LEFT, TOP RIGHT, BOTTOM RIGHT
+    polygon = np.array([[89,411], [459,195], [810,195], [1280,411]]) 
     cv2.fillConvexPoly(stencil, polygon, 1)
     return stencil
 def get_roi(img):
@@ -142,9 +159,17 @@ def get_roi(img):
     # img=img[225:375,185:702]
     return img
 def getBirdEye(img):
-    road_coordinates=np.float32([ [185,225], [702,225],[702,375],[185,375]])
-    dest_coordinates=np.float32([[0,0], [1280,0], [1280,720], [0,720]])
+
+    #ORDER: TOP LEFT, TOP RIGHT, BOTTOM RIGHT, BOTTOM LEFT
+    road_coordinates=np.float32([[459,195], [810,195], [1280,411],[89,411]])
+    dest_coordinates=np.float32([[0,0], [720,0], [720,1280], [0,1280]])
     dest_matrix=cv2.getPerspectiveTransform(road_coordinates,dest_coordinates)
+    result = cv2.warpPerspective(img, dest_matrix, (720,1280))
+    return result
+def get_normal_view(img):
+    road_coordinates=np.float32([[459,195], [810,195], [1280,411],[89,411]])
+    dest_coordinates=np.float32([[0,0], [720,0], [720,1280], [0,1280]])
+    dest_matrix=cv2.getPerspectiveTransform(dest_coordinates,road_coordinates)
     result = cv2.warpPerspective(img, dest_matrix, (1280,720))
     return result
 
@@ -168,36 +193,45 @@ def morph_close(img):
     closing=cv2.morphologyEx(img,cv2.MORPH_CLOSE,kernal)
     return closing
 def read_image():
-    img = cv2.imread('./images/8.jpg')
+    img = cv2.imread('./images/3.jpg')
     img=cv2.resize(img,(1280,720))
+    img_org=img.copy()
     img1=get_roi(img)
     blur = cv2.blur(img1,(5,5))
     blur0=cv2.medianBlur(blur,5)
     blur1= cv2.GaussianBlur(blur0,(5,5),0)
     blur2= cv2.bilateralFilter(blur1,9,75,75)
-    hsv = cv2.cvtColor(img1, cv2.COLOR_BGR2HSV)
+    hsv = cv2.cvtColor(blur2, cv2.COLOR_BGR2HSV)
     lower_gray = np.array([0, 5, 50], np.uint8)
     upper_gray = np.array([179, 50, 255], np.uint8)
     mask = cv2.inRange(hsv, lower_gray, upper_gray)
     res = cv2.bitwise_and(img1,img1, mask= mask)    
     res=morph_close(res)
-    # #Get contours
+    # # # #Get contours
     res=cv2.cvtColor(res, cv2.COLOR_BGR2GRAY);
     res= cv2.blur(res,(5,5))
 
-    birdeye=getBirdEye(res)
+    birdeye=getBirdEye(res)  
 
     contours, hierarchy = cv2.findContours(birdeye, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-    contours=smoothenContour(contours)
+    # contours=smoothenContour(contours)
     areas = [cv2.contourArea(c) for c in contours]
     max_index = np.argmax(areas)
     empty_mat=np.zeros_like(birdeye)
-    cv2.drawContours(empty_mat, contours, max_index, (255,255,102), 3)
+    empty_mat=cv2.cvtColor(empty_mat,cv2.COLOR_GRAY2BGR)
+    cv2.drawContours(empty_mat, contours, max_index, (0,255,0), -1)
     # cv2.imshow("ss",img)
-    out_img, curves, lanes, ploty = sliding_window(empty_mat) 
-    curverad=get_curve(img, curves[0],curves[1])
-    cv2.imshow("sss",birdeye)
-    print(curverad)
+    # out_img, curves, lanes, ploty= sliding_window(empty_mat) 
+    # curverad=get_curve(out_img, curves[0],curves[1])
+    normal_perspective=get_normal_view(empty_mat)
+
+    final=cv2.addWeighted(img_org,1,normal_perspective,0.5,0)
+    cv2.imshow("sss",final)
+    # cv2.imshow("ssss",res)
+
+    # cv2.imshow("s1ss",img)
+
+    # print(curverad)
     cv2.waitKey(0)
 
 read_image()

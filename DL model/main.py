@@ -71,31 +71,33 @@ def morph_close(img):
     return closing
 def read_image(img_path,rand_shadow=False):
     img = cv2.imread(img_path)
+    print("SHAPE")
+    print(img.shape)
     if(rand_shadow):
         img=add_random_shadow(img)
 
-    img1=get_roi(img)
-    blur = cv2.blur(img,(5,5))
-    blur0=cv2.medianBlur(blur,5)
-    blur1= cv2.GaussianBlur(blur0,(5,5),0)
-    blur2= cv2.bilateralFilter(blur1,9,75,75)
-    hsv = cv2.cvtColor(blur2,cv2.COLOR_BGR2HSV)
-    lower_gray = np.array([0, 5, 50], np.uint8)
-    upper_gray = np.array([179, 50, 255], np.uint8)
-    mask = cv2.inRange(hsv, lower_gray, upper_gray)
-    res = cv2.bitwise_and(img,img, mask= mask)
-    res=morph_close(res)
-    # #Get contours
-    res=cv2.cvtColor(res, cv2.COLOR_BGR2GRAY);
-    res= cv2.blur(res,(3,3))
-    birdeye=getBirdEye(res)
-    contours, hierarchy = cv2.findContours(birdeye, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-    contours=smoothenContour(contours)
-    areas = [cv2.contourArea(c) for c in contours]
-    max_index = np.argmax(areas)
-    mask_image=np.zeros_like(birdeye)
-    cv2.drawContours(mask_image, contours, max_index, (255,255,255), -1)
-    return mask_image
+    # img1=get_roi(img)
+    # blur = cv2.blur(img,(5,5))
+    # blur0=cv2.medianBlur(blur,5)
+    # blur1= cv2.GaussianBlur(blur0,(5,5),0)
+    # blur2= cv2.bilateralFilter(blur1,9,75,75)
+    # hsv = cv2.cvtColor(blur2,cv2.COLOR_BGR2HSV)
+    # lower_gray = np.array([0, 5, 50], np.uint8)
+    # upper_gray = np.array([179, 50, 255], np.uint8)
+    # mask = cv2.inRange(hsv, lower_gray, upper_gray)
+    # res = cv2.bitwise_and(img,img, mask= mask)
+    # res=morph_close(res)
+    # # #Get contours
+    # res=cv2.cvtColor(res, cv2.COLOR_BGR2GRAY);
+    # res= cv2.blur(res,(3,3))
+    # birdeye=getBirdEye(res)
+    # dim,contours, hierarchy = cv2.findContours(birdeye, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    # contours=smoothenContour(contours)
+    # areas = [cv2.contourArea(c) for c in contours]
+    # max_index = np.argmax(areas)
+    # mask_image=np.zeros_like(birdeye)
+    # cv2.drawContours(mask_image, contours, max_index, (255,255,255), -1)
+    return img
 
 def flip_image(img,angle):
     angle=-angle
@@ -104,9 +106,12 @@ def flip_image(img,angle):
 def generate_image(raw_image_path,steer,ind):
     print("GENERATING FOR"+str(ind))
     m_image=read_image(raw_image_path)
-    shadow_image=read_image(raw_image_path,True)
+    # shadow_image=read_image(raw_image_path,True)
     flipped_image,flip_steer=flip_image(m_image,steer)
     # flipped_image_shadow,flip_steer_shadow=flip_image(shadow_image,steer)
+    
+    # m_image= np.expand_dims(m_image, axis=2)
+    # flipped_image= np.expand_dims(flipped_image, axis=2)
 
     images=np.array([m_image,flipped_image])
     angles=np.array([steer,flip_steer])
@@ -120,6 +125,7 @@ def get_dataset():
     arr_y=np.array([])
     for index,row in drive_log.iterrows():
         inp,oup=generate_image(row['loc'],float(row['angle']),index)
+        
         if(index==0):
             arr_x=inp
             arr_y=oup
@@ -131,34 +137,31 @@ def get_dataset():
 
 def nvidia_model():
     model = Sequential()
-    model.add(Lambda(lambda x: x/127.5-1,input_shape=(320,160,1)))
-    model.add(Conv2D(24,(5,5),activation="elu",strides=(2,2)))
-    model.add(Conv2D(36,(5,5),activation="elu",strides=(2,2)))
-    model.add(Conv2D(48,(5,5),activation="elu",strides=(2,2)))
-    model.add(Conv2D(64,(3,3),activation="elu"))
-    model.add(Conv2D(64,(3,3),activation="elu"))
-
+    model.add(Lambda(lambda x: x/127.5-1.0, input_shape=(160,320,3)))
+    model.add(Conv2D(24, 5, 5, activation='elu', subsample=(2, 2)))
+    model.add(Conv2D(36, 5, 5, activation='elu', subsample=(2, 2)))
+    model.add(Conv2D(48, 5, 5, activation='elu', subsample=(2, 2)))
+    model.add(Conv2D(64, 3, 3, activation='elu'))
+    model.add(Conv2D(64, 3, 3, activation='elu'))
     model.add(Dropout(0.5))
     model.add(Flatten())
     model.add(Dense(100, activation='elu'))
-    model.add(Dropout(0.5))
     model.add(Dense(50, activation='elu'))
-    model.add(Dropout(0.5))
     model.add(Dense(10, activation='elu'))
-    model.add(Dropout(0.5))
     model.add(Dense(1))
-    optimizer = Adam(lr=1e-3)
-    model.compile(loss='mse', optimizer=optimizer, metrics=['accuracy'])
+    model.summary()
+
     return model
 
 def train_data():
     X,Y=get_dataset()
     model=nvidia_model()
+    model.compile(loss='mean_squared_error', optimizer=Adam(lr=1.0e-4))
     print(model.summary())
     print(X.shape)
-    history = model.fit(X, Y, epochs=25, validation_split=0.15, batch_size=24, shuffle=1)
-    model.save('./saved_model/my_model_2')
-    model.save('./saved_model/my_model_2_h.h5')
+    history = model.fit(X, Y, nb_epoch=25, validation_split=0.15, batch_size=24, shuffle=1)
+    # model.save('./saved_model/my_model_2')
+    model.save('./saved_model/model6.h5')
 
 train_data()
 
