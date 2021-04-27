@@ -187,13 +187,30 @@ def smoothenContour(contours):
         smoothened.append(np.asarray(res_array, dtype=np.int32))
     return smoothened
     
+def draw_line(img):
+    n_windowsize=5
+    points=[]
+    n_row_start=0
+    while(n_row_start+5 != 1280):
+        pts=[0,0]
+        for i in range(0,5):
+            row=img[n_row_start+i,:]
+            ls = [i for i, e in enumerate(row) if e != 0]
+            midpt_X=(ls[0]+ls[-1])/2
+            # first=(midpt,n_row_start+i)
+            pts=[pts[0]+midpt_X,pts[1]+n_row_start+i]
+        pts=[int(pts[0]/5),int(pts[1]/5)]
+        points.append(pts)
+        n_row_start+=5
     
+    points = np.array(points).reshape((-1,1,2))
+    return points
 def morph_close(img):
     kernal=np.ones((12,12),np.uint8)
     closing=cv2.morphologyEx(img,cv2.MORPH_CLOSE,kernal)
     return closing
 def read_image():
-    img = cv2.imread('./images/3.jpg')
+    img = cv2.imread('./images/2.jpg')
     img=cv2.resize(img,(1280,720))
     img_org=img.copy()
     img1=get_roi(img)
@@ -219,19 +236,22 @@ def read_image():
     max_index = np.argmax(areas)
     empty_mat=np.zeros_like(birdeye)
     empty_mat=cv2.cvtColor(empty_mat,cv2.COLOR_GRAY2BGR)
-    cv2.drawContours(empty_mat, contours, max_index, (0,255,0), -1)
+    max_contour=contours[max_index]
+    max_contour = cv2.approxPolyDP(max_contour, 0.009 * cv2.arcLength(max_contour, True), True)
+    cv2.drawContours(empty_mat, [max_contour], -1, (0,255,0), -1)
     # cv2.imshow("ss",img)
     # out_img, curves, lanes, ploty= sliding_window(empty_mat) 
     # curverad=get_curve(out_img, curves[0],curves[1])
+    empty_mat_gray=empty_mat[:,:,1]
+    center_pts=draw_line(empty_mat_gray)
+    print(center_pts)
+    polyline=cv2.polylines(empty_mat,[center_pts],False,(255,0,0),3)
     normal_perspective=get_normal_view(empty_mat)
-
     final=cv2.addWeighted(img_org,1,normal_perspective,0.5,0)
-    cv2.imshow("sss",final)
-    # cv2.imshow("ssss",res)
+   
+    cv2.imshow("Final",empty_mat)
+    cv2.imshow("Final2",final)
 
-    # cv2.imshow("s1ss",img)
-
-    # print(curverad)
     cv2.waitKey(0)
 
 read_image()
