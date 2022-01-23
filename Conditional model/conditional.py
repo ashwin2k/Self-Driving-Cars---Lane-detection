@@ -210,7 +210,7 @@ def morph_close(img):
     closing=cv2.morphologyEx(img,cv2.MORPH_CLOSE,kernal)
     return closing
 def read_image():
-    img = cv2.imread('./images/2.jpg')
+    img = cv2.imread('/home/ashwin/edison-mk1/Conditional model/images/3.jpg')
     img=cv2.resize(img,(1280,720))
     img_org=img.copy()
     img1=get_roi(img)
@@ -248,10 +248,9 @@ def read_image():
     polyline=cv2.polylines(empty_mat,[center_pts],False,(255,0,0),3)
     normal_perspective=get_normal_view(empty_mat)
     final=cv2.addWeighted(img_org,1,normal_perspective,0.5,0)
-   
-    cv2.imshow("Final",empty_mat)
+    cv2.imwrite("/home/ashwin/edison-mk1/Conditional model/results/result.jpg",final)
+    
     cv2.imshow("Final2",final)
-
-    cv2.waitKey(0)
+    cv2.waitKey(5000)
 
 read_image()
