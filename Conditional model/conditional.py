@@ -249,6 +249,7 @@ def read_image():
     normal_perspective=get_normal_view(empty_mat)
     final=cv2.addWeighted(img_org,1,normal_perspective,0.5,0)
     cv2.imwrite("/home/ashwin/edison-mk1/Conditional model/results/result.jpg",final)
+    cv2.imwrite("/home/ashwin/edison-mk1/Conditional model/results/birdeye.jpg",birdeye)
     
     cv2.imshow("Final2",final)
     cv2.waitKey(5000)
