@@ -1,5 +1,6 @@
 /.vscode
 /.ipynb_checkpoints
+.gitignore
 /Conditional model/__pycache__
 
 
